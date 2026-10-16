@@ -1,0 +1,132 @@
+{
+  "name": "Webhook reliability: dead-letter queue to a Data Table",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Dead letter queue\nPOST { source, payload, attempts, last_status, last_error, reason } to this webhook. The payload is validated and stored as one row in an n8n Data Table so it can be inspected and re-sent by hand later. Nothing is dropped silently: invalid input gets a 400 and is not stored.\n\nSetup: create a Data Table (e.g. 'dead_letters') with string columns: dlq_id, source, status, reason, attempts, last_status, last_error, payload_json, received_at. Then pick it in the 'Store Dead Letter' node.\n\nTested headless on n8n 2.35.7 (local instance, via CLI and API, 2026-10-13) by the farm AI agent: valid body stored (201), empty body rejected (400), Data Table node worked. Import through the editor UI by a human and Header Auth are not yet tested; if import shows an error on the Data Table node, re-select the table and map the columns by hand.\n\nWritten by an AI agent working for Martin Minkov, who owns and is accountable for it. Contact: mminkov@aubian.net\nLicense: MIT.\n\nBefore activating, enable Header Auth on the Webhook node (these webhooks are unauthenticated by default; the workflow itself sets no payload size limit, only your n8n instance's maximum request size applies). If you enable Header Auth on the dead-letter-queue webhook, the retry workflow's `Send to Dead Letter Queue` node must send the same header (select the same n8n credential on that node); otherwise the hand-off fails and the payload can be lost.\n\nThis note has setup steps only; tests are in README.md.",
+        "height": 400,
+        "width": 480
+      },
+      "id": "e1000000-0000-4000-8000-000000000001",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -280]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dead-letter-queue",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000002",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate input and build the dead-letter record. Does not store anything itself.\nconst body = $input.first().json.body;\nif (!body || typeof body !== 'object' || body.payload === undefined) {\n  return [{ json: { valid: false, error: 'body.payload is required' } }];\n}\nconst rid = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2);\nreturn [{ json: {\n  valid: true,\n  dlq_id: rid,\n  source: String(body.source || 'unknown'),\n  status: 'pending',\n  reason: String(body.reason || 'unspecified'),\n  attempts: String(body.attempts ?? ''),\n  last_status: String(body.last_status ?? ''),\n  last_error: String(body.last_error ?? ''),\n  payload_json: JSON.stringify(body.payload),\n  received_at: new Date().toISOString()\n} }];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000003",
+      "name": "Build Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "v1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000004",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dlq_id": "={{ $json.dlq_id }}",
+            "source": "={{ $json.source }}",
+            "status": "={{ $json.status }}",
+            "reason": "={{ $json.reason }}",
+            "attempts": "={{ $json.attempts }}",
+            "last_status": "={{ $json.last_status }}",
+            "last_error": "={{ $json.last_error }}",
+            "payload_json": "={{ $json.payload_json }}",
+            "received_at": "={{ $json.received_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000005",
+      "name": "Store Dead Letter",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [660, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { stored: true, dlq_id: $('Build Record').first().json.dlq_id } }}",
+        "options": { "responseCode": 201 }
+      },
+      "id": "e1000000-0000-4000-8000-000000000006",
+      "name": "Respond Stored",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { stored: false, error: $json.error } }}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "e1000000-0000-4000-8000-000000000007",
+      "name": "Respond Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 320]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Build Record", "type": "main", "index": 0 }]] },
+    "Build Record": { "main": [[{ "node": "Valid?", "type": "main", "index": 0 }]] },
+    "Valid?": {
+      "main": [
+        [{ "node": "Store Dead Letter", "type": "main", "index": 0 }],
+        [{ "node": "Respond Invalid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store Dead Letter": { "main": [[{ "node": "Respond Stored", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": []
+}

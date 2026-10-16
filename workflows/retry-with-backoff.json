@@ -1,0 +1,190 @@
+{
+  "name": "Webhook reliability: retry with exponential backoff",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Retry with exponential backoff\nPOST a JSON body to this webhook. The workflow forwards it to TARGET_URL and retries on failure with delay = base * 2^(attempt-1) (+ jitter), up to max_attempts. After the last failure it hands the payload to the dead-letter-queue workflow.\n\nSetup: edit the 'Config' node (target_url, dlq_url, base_delay_seconds, max_attempts). Placeholder URLs use example.invalid and will not work until you replace them.\n\nKnown limit: if the dead-letter-queue call fails, the execution fails and the payload can be lost.\n\nTested headless on n8n 2.35.7 (local instance, via CLI and API, 2026-10-13) by the farm AI agent: success, retry with backoff, exhaustion to the dead-letter queue, permanent 4xx. Import through the editor UI by a human and Header Auth are not yet tested. Test before relying on it.\n\nWritten by an AI agent working for Martin Minkov, who owns and is accountable for it. Contact: mminkov@aubian.net\nLicense: MIT.\n\nBefore activating, enable Header Auth on the Webhook node (these webhooks are unauthenticated by default; the workflow itself sets no payload size limit, only your n8n instance's maximum request size applies). If you enable Header Auth on the dead-letter-queue webhook, the retry workflow's `Send to Dead Letter Queue` node must send the same header (select the same n8n credential on that node); otherwise the hand-off fails and the payload can be lost.\n\nThis note has setup steps only; tests are in README.md.",
+        "height": 340,
+        "width": 460
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "retry-with-backoff",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "target_url", "value": "https://example.invalid/target", "type": "string" },
+            { "id": "c2", "name": "dlq_url", "value": "https://example.invalid/webhook/dead-letter-queue", "type": "string" },
+            { "id": "c3", "name": "base_delay_seconds", "value": 2, "type": "number" },
+            { "id": "c4", "name": "max_attempts", "value": 5, "type": "number" },
+            { "id": "c5", "name": "attempt", "value": 0, "type": "number" },
+            { "id": "c6", "name": "payload", "value": "={{ $json.body }}", "type": "object" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.target_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Config').first().json.payload) }}",
+        "options": {
+          "response": { "response": { "neverError": true, "fullResponse": true } },
+          "timeout": 15000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Call Target",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "ok1",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute next attempt and exponential delay with jitter.\n// Only retries on network errors (no statusCode), 408, 429 and 5xx. Other 4xx are permanent: go straight to DLQ.\nconst cfg = $('Config').first().json;\nconst res = $input.first().json;\nconst status = res.statusCode;\nconst retryable = status === undefined || status === 408 || status === 429 || status >= 500;\n// $runIndex counts how many times this node has run in this execution (0-based), so it is the attempt counter.\nconst nextAttempt = $runIndex + 1;\nconst exhausted = !retryable || nextAttempt >= cfg.max_attempts;\nconst jitter = Math.random() * 0.25 * cfg.base_delay_seconds;\nconst delay = Math.min(cfg.base_delay_seconds * Math.pow(2, nextAttempt - 1) + jitter, 300);\nreturn [{ json: {\n  attempt: nextAttempt,\n  exhausted,\n  delay_seconds: Math.round(delay * 100) / 100,\n  last_status: status ?? null,\n  last_error: res.error ? String(res.error.message || res.error) : null,\n  reason: retryable ? 'max_attempts_reached' : 'non_retryable_status'\n} }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Compute Backoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "ex1",
+              "leftValue": "={{ $json.exhausted }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Out of Attempts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1100, 380]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $json.delay_seconds }}",
+        "unit": "seconds"
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Wait Backoff",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1320, 480],
+      "webhookId": "b2000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.dlq_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: 'retry-with-backoff', payload: $('Config').first().json.payload, attempts: $json.attempt, last_status: $json.last_status, last_error: $json.last_error, reason: $json.reason }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "a1000000-0000-4000-8000-000000000009",
+      "name": "Send to Dead Letter Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 280]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "d1", "name": "outcome", "value": "delivered", "type": "string" },
+            { "id": "d2", "name": "http_status", "value": "={{ $json.statusCode }}", "type": "number" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-00000000000a",
+      "name": "Delivered",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 20]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Call Target", "type": "main", "index": 0 }]] },
+    "Call Target": { "main": [[{ "node": "Succeeded?", "type": "main", "index": 0 }]] },
+    "Succeeded?": {
+      "main": [
+        [{ "node": "Delivered", "type": "main", "index": 0 }],
+        [{ "node": "Compute Backoff", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compute Backoff": { "main": [[{ "node": "Out of Attempts?", "type": "main", "index": 0 }]] },
+    "Out of Attempts?": {
+      "main": [
+        [{ "node": "Send to Dead Letter Queue", "type": "main", "index": 0 }],
+        [{ "node": "Wait Backoff", "type": "main", "index": 0 }]
+      ]
+    },
+    "Wait Backoff": { "main": [[{ "node": "Call Target", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": []
+}

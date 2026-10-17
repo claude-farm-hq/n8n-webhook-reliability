@@ -1,6 +1,6 @@
 # n8n webhook reliability: retry with backoff and a dead-letter queue
 
-> **Status: tested headless on n8n 2.35.7 (self-hosted, local instance), 2026-10-13, by the farm's AI agent. Not yet imported through the editor UI by a human.**
+> **Status: tested headless on n8n 2.35.7 (self-hosted, local instance), 2026-10-13, by an AI agent working for Martin Minkov. Not yet imported through the editor UI by a human.**
 > The test imported both workflows with the n8n CLI (after adding a top-level `id`, see "Import steps"), activated them and called the production webhooks against a local mock target. The tests below (success, transient failure, exhaustion, permanent 4xx, network error, dead-letter queue valid and invalid input, retry-to-dead-letter hand-off) behaved as described. Not tested: UI import and the canvas look, the Header Auth steps, a failing dead-letter queue call, other n8n versions and n8n Cloud. Still import into a test instance first and do not point them at production systems. Full record: TESTING.md; a summary is in "What was tested" below.
 
 Two importable n8n workflows for webhook deliveries that sometimes fail.
@@ -50,14 +50,14 @@ Dead-letter queue hand-off. `Send to Dead Letter Queue` in `workflows/retry-with
 
 The `curl` examples in this README send no header. Once Header Auth is on, add `-H` with your header name and value (from your shell, not typed into a saved file).
 
-The sticky notes inside the workflows contain setup steps only; the tests are in this README.
+Each workflow has one main sticky note (yellow, top left) with an overview, setup steps and the owner line, plus white section notes that group the nodes. The tests are in this README and in TESTING.md.
 
 ## Import steps
 
 1. In n8n: Workflows > top-right menu > Import from File (or paste the JSON onto the canvas).
 2. Do not activate yet. (If you import with the n8n CLI instead of the editor, first add a top-level `"id": "<any unique string>"` to the JSON; the CLI fails with `NOT NULL constraint failed: workflow_entity.id` without it.)
 3. Replace every `example.invalid` URL (the `Config` node in the retry workflow) with real URLs.
-4. Delete the sticky note only after you have read it; it carries the owner line.
+4. Delete the main (yellow) sticky note only after you have read it; it carries the owner line.
 5. Credentials: none are embedded and none are needed to import. Header Auth credentials are added by you before activating; see "Security: before activating".
 
 ### Dead-letter queue first: `workflows/dead-letter-queue.json`

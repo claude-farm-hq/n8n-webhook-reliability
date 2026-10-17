@@ -3,15 +3,55 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Retry with exponential backoff\nPOST a JSON body to this webhook. The workflow forwards it to TARGET_URL and retries on failure with delay = base * 2^(attempt-1) (+ jitter), up to max_attempts. After the last failure it hands the payload to the dead-letter-queue workflow.\n\nSetup: edit the 'Config' node (target_url, dlq_url, base_delay_seconds, max_attempts). Placeholder URLs use example.invalid and will not work until you replace them.\n\nKnown limit: if the dead-letter-queue call fails, the execution fails and the payload can be lost.\n\nTested headless on n8n 2.35.7 (local instance, via CLI and API, 2026-10-13) by the farm AI agent: success, retry with backoff, exhaustion to the dead-letter queue, permanent 4xx. Import through the editor UI by a human and Header Auth are not yet tested. Test before relying on it.\n\nWritten by an AI agent working for Martin Minkov, who owns and is accountable for it. Contact: mminkov@aubian.net\nLicense: MIT.\n\nBefore activating, enable Header Auth on the Webhook node (these webhooks are unauthenticated by default; the workflow itself sets no payload size limit, only your n8n instance's maximum request size applies). If you enable Header Auth on the dead-letter-queue webhook, the retry workflow's `Send to Dead Letter Queue` node must send the same header (select the same n8n credential on that node); otherwise the hand-off fails and the payload can be lost.\n\nThis note has setup steps only; tests are in README.md.",
-        "height": 340,
-        "width": 460
+        "content": "## Retry with exponential backoff\nReceives a JSON POST and forwards it to your target URL. Failures are retried with a doubling delay plus jitter. After the last attempt the payload goes to the dead-letter queue workflow.\n\n### How it works\n1. The webhook answers at once with n8n's immediate acknowledgement. The caller does not get the delivery result.\n2. `Call Target` POSTs the payload. Network errors, 408, 429 and 5xx are retried; other 4xx go straight to the dead-letter queue.\n3. Delay = `base_delay_seconds * 2^(attempt-1)` plus jitter (up to 25% of the base), capped at 300 s.\n4. When `max_attempts` is used up, `Send to Dead Letter Queue` posts the payload to the other workflow. If that call fails, the payload can be lost.\n\n### Setup\n1. Before activating, enable Header Auth on the Webhook node. These webhooks are unauthenticated by default.\n2. In `Config`, set `target_url` to your endpoint and `dlq_url` to the dead-letter queue workflow's webhook URL (both are `example.invalid` placeholders and will not work until replaced). Optionally change `base_delay_seconds` and `max_attempts`.\n3. If you also protect the dead-letter queue webhook: `Send to Dead Letter Queue` sends no auth header. Select the same n8n credential on that node, or the hand-off fails.\n\nTested headless on n8n 2.35.7 (2026-10-13); not yet imported through the editor UI by a human. Test steps and limits: README.md and TESTING.md at https://github.com/claude-farm-hq/n8n-webhook-reliability\n\nWritten by an AI agent working for Martin Minkov, who owns and is accountable for it.\nBuilt and operated by Martin Minkov with AI agents. Contact: mminkov@aubian.net\nLicense: MIT.",
+        "height": 944,
+        "width": 560,
+        "color": 1
       },
       "id": "a1000000-0000-4000-8000-000000000001",
-      "name": "Note",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-200, -220]
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Receive and configure\nThe webhook answers at once. `Config` holds your URLs and retry limits.",
+        "height": 304,
+        "width": 352,
+        "color": 7
+      },
+      "id": "a1000000-0000-4000-8000-00000000000b",
+      "name": "Section: Receive and configure",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [608, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Call the target\nPOSTs the payload. A 2xx response counts as delivered.",
+        "height": 304,
+        "width": 512,
+        "color": 7
+      },
+      "id": "a1000000-0000-4000-8000-00000000000c",
+      "name": "Section: Call the target",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1008, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Retry or hand off\nOn failure: work out the delay, wait, call again. After the last attempt, send the payload to the dead-letter queue.",
+        "height": 464,
+        "width": 512,
+        "color": 7
+      },
+      "id": "a1000000-0000-4000-8000-00000000000d",
+      "name": "Section: Retry or hand off",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1008, 352]
     },
     {
       "parameters": {
@@ -24,7 +64,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 200]
+      "position": [656, 128]
     },
     {
       "parameters": {
@@ -44,7 +84,7 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [220, 200]
+      "position": [816, 128]
     },
     {
       "parameters": {
@@ -62,7 +102,7 @@
       "name": "Call Target",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 200],
+      "position": [1056, 128],
       "onError": "continueRegularOutput"
     },
     {
@@ -85,7 +125,7 @@
       "name": "Succeeded?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [660, 200]
+      "position": [1216, 128]
     },
     {
       "parameters": {
@@ -95,7 +135,7 @@
       "name": "Compute Backoff",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 380]
+      "position": [1056, 480]
     },
     {
       "parameters": {
@@ -117,7 +157,7 @@
       "name": "Out of Attempts?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1100, 380]
+      "position": [1216, 480]
     },
     {
       "parameters": {
@@ -129,7 +169,7 @@
       "name": "Wait Backoff",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1320, 480],
+      "position": [1216, 640],
       "webhookId": "b2000000-0000-4000-8000-000000000001"
     },
     {
@@ -145,7 +185,7 @@
       "name": "Send to Dead Letter Queue",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 280]
+      "position": [1376, 480]
     },
     {
       "parameters": {
@@ -161,7 +201,7 @@
       "name": "Delivered",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [880, 20]
+      "position": [1376, 128]
     }
   ],
   "connections": {

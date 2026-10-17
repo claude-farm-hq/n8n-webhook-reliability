@@ -3,15 +3,42 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Dead letter queue\nPOST { source, payload, attempts, last_status, last_error, reason } to this webhook. The payload is validated and stored as one row in an n8n Data Table so it can be inspected and re-sent by hand later. Nothing is dropped silently: invalid input gets a 400 and is not stored.\n\nSetup: create a Data Table (e.g. 'dead_letters') with string columns: dlq_id, source, status, reason, attempts, last_status, last_error, payload_json, received_at. Then pick it in the 'Store Dead Letter' node.\n\nTested headless on n8n 2.35.7 (local instance, via CLI and API, 2026-10-13) by the farm AI agent: valid body stored (201), empty body rejected (400), Data Table node worked. Import through the editor UI by a human and Header Auth are not yet tested; if import shows an error on the Data Table node, re-select the table and map the columns by hand.\n\nWritten by an AI agent working for Martin Minkov, who owns and is accountable for it. Contact: mminkov@aubian.net\nLicense: MIT.\n\nBefore activating, enable Header Auth on the Webhook node (these webhooks are unauthenticated by default; the workflow itself sets no payload size limit, only your n8n instance's maximum request size applies). If you enable Header Auth on the dead-letter-queue webhook, the retry workflow's `Send to Dead Letter Queue` node must send the same header (select the same n8n credential on that node); otherwise the hand-off fails and the payload can be lost.\n\nThis note has setup steps only; tests are in README.md.",
-        "height": 400,
-        "width": 480
+        "content": "## Dead letter queue\nStores payloads that another workflow could not deliver as rows in an n8n Data Table, so you can inspect and re-send them by hand later. Nothing is dropped silently.\n\n### How it works\n1. POST { source, payload, attempts, last_status, last_error, reason } to this webhook.\n2. `Build Record` checks the body. `payload` is required: without it the webhook answers 400 and nothing is stored.\n3. Valid input is inserted as one row with status `pending`, and the webhook answers 201 with the new `dlq_id`.\n\n### Setup\n1. Before activating, enable Header Auth on the Webhook node. These webhooks are unauthenticated by default. If you do, the retry workflow's `Send to Dead Letter Queue` node must send the same header (select the same n8n credential on it), or its hand-off fails and the payload can be lost.\n2. Create a Data Table (for example `dead_letters`) with string columns: dlq_id, source, status, reason, attempts, last_status, last_error, payload_json, received_at.\n3. Open `Store Dead Letter`, select that table and check the column mapping. If the import shows an error on this node, re-select the table and map the columns by hand.\n\nTested headless on n8n 2.35.7 (2026-10-13); not yet imported through the editor UI by a human. Test steps and limits: README.md and TESTING.md at https://github.com/claude-farm-hq/n8n-webhook-reliability\n\nWritten by an AI agent working for Martin Minkov, who owns and is accountable for it.\nBuilt and operated by Martin Minkov with AI agents. Contact: mminkov@aubian.net\nLicense: MIT.",
+        "height": 928,
+        "width": 560,
+        "color": 1
       },
       "id": "e1000000-0000-4000-8000-000000000001",
-      "name": "Note",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-200, -280]
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Receive and validate\nThe webhook takes the POST. `Build Record` checks `payload` and builds the row; `Valid?` routes it.",
+        "height": 304,
+        "width": 512,
+        "color": 7
+      },
+      "id": "e1000000-0000-4000-8000-000000000008",
+      "name": "Section: Receive and validate",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [608, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Store and respond\nValid input is stored (201). Invalid input gets 400 and is not stored.",
+        "height": 464,
+        "width": 352,
+        "color": 7
+      },
+      "id": "e1000000-0000-4000-8000-000000000009",
+      "name": "Section: Store and respond",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1168, 0]
     },
     {
       "parameters": {
@@ -24,7 +51,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 200]
+      "position": [656, 128]
     },
     {
       "parameters": {
@@ -34,7 +61,7 @@
       "name": "Build Record",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 200]
+      "position": [816, 128]
     },
     {
       "parameters": {
@@ -56,7 +83,7 @@
       "name": "Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [440, 200]
+      "position": [976, 128]
     },
     {
       "parameters": {
@@ -87,7 +114,7 @@
       "name": "Store Dead Letter",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [660, 120]
+      "position": [1216, 128]
     },
     {
       "parameters": {
@@ -99,7 +126,7 @@
       "name": "Respond Stored",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [880, 120]
+      "position": [1376, 128]
     },
     {
       "parameters": {
@@ -111,7 +138,7 @@
       "name": "Respond Invalid",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [660, 320]
+      "position": [1216, 288]
     }
   ],
   "connections": {

@@ -4,7 +4,7 @@ Built and operated by Martin Minkov with AI agents. Contact: mminkov@aubian.net
 
 This test was run, and this record was written, by an AI agent working for Martin Minkov, who owns this repository and is accountable for it. The test was headless (command line and REST API against a throwaway local n8n instance). No human imported the files through the n8n editor UI; that remains untested. Martin Minkov accepted this test run on 2026-10-14 as the pre-publication test of these two workflows.
 
-Everything below, except the file comparison in "Files tested vs files in this repo", was measured in that one run. Where something was not run, it is listed under "Not tested".
+Everything below, except the file comparison in "Files tested vs files in this repo" and the section "Sticky notes reworked after the test, 2026-10-17", was measured in that one run. Where something was not run, it is listed under "Not tested".
 
 ## Setup
 
@@ -34,7 +34,7 @@ Node `typeVersion`s all loaded without error in 2.35.7 (Webhook 2, Set 3.4, HTTP
 
 ## Files tested vs files in this repo
 
-The test ran on the workflow JSON files as they were before the test, plus the added `id` described above. The two workflow files in this repository differ from those versions only in the text of the sticky note (the node named `Note` in each file), which was changed to state the test result. No node, parameter or connection changed.
+The test ran on the workflow JSON files as they were before the test, plus the added `id` described above. The next two paragraphs describe the files as published on 2026-10-17 (first commit); for the later sticky-note rework see "Sticky notes reworked after the test, 2026-10-17" below. At first publication the two workflow files differed from those versions only in the text of the sticky note (the node named `Note` in each file), which was changed to state the test result. No node, parameter or connection changed.
 
 This was checked on 2026-10-14 by parsing both versions of each file as JSON and comparing them deep-equal with the `parameters.content` of the `Note` node set aside; the rest of each file (nodes, parameters, connections, positions) was identical.
 
@@ -84,3 +84,9 @@ None in the workflow logic. No edits to the workflow behaviour were needed. The 
 ## Cleanup
 
 n8n and the mock server were stopped afterwards (`ps` showed neither). The scratch directory (database, test owner login, `node_modules`) was outside any repository and is not part of this repository.
+
+## Sticky notes reworked after the test, 2026-10-17
+
+On 2026-10-17 an AI agent working for Martin Minkov reworked the sticky notes in both workflow files to follow n8n's template guidelines: one yellow overview note at the top left (how it works, setup, owner line) and white section notes that group the nodes. The old `Note` is now the overview note, named `Overview`. The parameters, types, type versions, ids, names and connections of every other node are identical to the files tested on 2026-10-13; only the sticky notes and the canvas positions of the nodes changed. This was checked by parsing both versions as JSON and comparing them deep-equal with the sticky notes and node positions set aside.
+
+The reworked files were not run again: no webhook was called. They were imported with the n8n CLI into a throwaway local n8n 2.35.7 (copies with an added `id`) and exported again. Every sticky note kept its text, colour, size and position, and the nodes and connections came back unchanged. The notes were also drawn once in that instance's read-only preview canvas, where the text fitted inside the boxes. Import through the editor UI by a human is still untested.
